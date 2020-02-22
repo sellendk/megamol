@@ -62,6 +62,7 @@ GUIView::GUIView()
     , render_view_slot("renderview", "Connects to a preceding RenderView that will be decorated with a GUI")
     , style_param("style", "Color style, theme")
     , state_param("state", "Current state of all windows. Automatically updated.")
+    , overrideCall(nullptr)
     , context(nullptr)
     , window_manager()
     , tf_editor()
@@ -88,6 +89,7 @@ GUIView::GUIView()
     this->style_param << styles;
     this->style_param.ForceSetDirty();
     this->MakeSlotAvailable(&this->style_param);
+    styles = nullptr;
 
     this->state_param << new core::param::StringParam("");
     this->MakeSlotAvailable(&this->state_param);
@@ -1495,7 +1497,8 @@ void GUIView::drawParameter(const core::Module& mod, core::param::ParamSlot& slo
     auto param = slot.Parameter();
     if (!param.IsNull()) {
         // Set different style if parameter is read-only
-        if (param->IsGUIReadOnly()) {
+        bool readOnly = param->IsGUIReadOnly();
+        if (readOnly) {
             ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
             ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
         }
@@ -1580,7 +1583,8 @@ void GUIView::drawParameter(const core::Module& mod, core::param::ParamSlot& slo
             ImGui::InputFloat(
                 param_label.c_str(), &it->second, 1.0f, 10.0f, float_format.c_str(), ImGuiInputTextFlags_None);
             if (ImGui::IsItemDeactivatedAfterEdit()) {
-                p->SetValue(std::max(p->MinValue(), std::min(it->second, p->MaxValue())));
+                it->second = std::max(p->MinValue(), std::min(it->second, p->MaxValue()));
+                p->SetValue(it->second);
             } else if (!ImGui::IsItemActive() && !ImGui::IsItemEdited()) {
                 it->second = p->Value();
             }
@@ -1592,7 +1596,8 @@ void GUIView::drawParameter(const core::Module& mod, core::param::ParamSlot& slo
             }
             ImGui::InputInt(param_label.c_str(), &it->second, 1, 10, ImGuiInputTextFlags_None);
             if (ImGui::IsItemDeactivatedAfterEdit()) {
-                p->SetValue(std::max(p->MinValue(), std::min(it->second, p->MaxValue())));
+                it->second = std::max(p->MinValue(), std::min(it->second, p->MaxValue()));
+                p->SetValue(it->second);
             } else if (!ImGui::IsItemActive() && !ImGui::IsItemEdited()) {
                 it->second = p->Value();
             }
@@ -1605,6 +1610,9 @@ void GUIView::drawParameter(const core::Module& mod, core::param::ParamSlot& slo
             ImGui::InputFloat2(
                 param_label.c_str(), it->second.PeekComponents(), float_format.c_str(), ImGuiInputTextFlags_None);
             if (ImGui::IsItemDeactivatedAfterEdit()) {
+                auto x = std::max(p->MinValue().X(), std::min(it->second.X(), p->MaxValue().X()));
+                auto y = std::max(p->MinValue().Y(), std::min(it->second.Y(), p->MaxValue().Y()));
+                it->second = vislib::math::Vector<float, 2>(x, y);
                 p->SetValue(it->second);
             } else if (!ImGui::IsItemActive() && !ImGui::IsItemEdited()) {
                 it->second = p->Value();
@@ -1618,6 +1626,10 @@ void GUIView::drawParameter(const core::Module& mod, core::param::ParamSlot& slo
             ImGui::InputFloat3(
                 param_label.c_str(), it->second.PeekComponents(), float_format.c_str(), ImGuiInputTextFlags_None);
             if (ImGui::IsItemDeactivatedAfterEdit()) {
+                auto x = std::max(p->MinValue().X(), std::min(it->second.X(), p->MaxValue().X()));
+                auto y = std::max(p->MinValue().Y(), std::min(it->second.Y(), p->MaxValue().Y()));
+                auto z = std::max(p->MinValue().Z(), std::min(it->second.Z(), p->MaxValue().Z()));
+                it->second = vislib::math::Vector<float, 3>(x, y, z);
                 p->SetValue(it->second);
             } else if (!ImGui::IsItemActive() && !ImGui::IsItemEdited()) {
                 it->second = p->Value();
@@ -1631,6 +1643,11 @@ void GUIView::drawParameter(const core::Module& mod, core::param::ParamSlot& slo
             ImGui::InputFloat4(
                 param_label.c_str(), it->second.PeekComponents(), float_format.c_str(), ImGuiInputTextFlags_None);
             if (ImGui::IsItemDeactivatedAfterEdit()) {
+                auto x = std::max(p->MinValue().X(), std::min(it->second.X(), p->MaxValue().X()));
+                auto y = std::max(p->MinValue().Y(), std::min(it->second.Y(), p->MaxValue().Y()));
+                auto z = std::max(p->MinValue().Z(), std::min(it->second.Z(), p->MaxValue().Z()));
+                auto w = std::max(p->MinValue().W(), std::min(it->second.W(), p->MaxValue().W()));
+                it->second = vislib::math::Vector<float, 4>(x, y, z, w);
                 p->SetValue(it->second);
             } else if (!ImGui::IsItemActive() && !ImGui::IsItemEdited()) {
                 it->second = p->Value();
