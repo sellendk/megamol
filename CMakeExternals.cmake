@@ -107,6 +107,16 @@ function(require_external NAME)
       GIT_TAG "v1.3.0"
       INCLUDE_DIR "include")
 
+  # tinygltf
+  elseif(NAME STREQUAL "tinygltf")
+    if(TARGET tinygltf)
+      return()
+    endif()
+
+    add_external_headeronly_project(tinygltf
+      GIT_REPOSITORY https://github.com/syoyo/tinygltf.git
+      GIT_TAG "v2.2.0")
+
   # Built libraries #####################################################
 
   # adios2
@@ -144,6 +154,25 @@ function(require_external NAME)
 
     add_external_library(adios2
       LIBRARY ${ADIOS2_LIB})
+
+  # libigl
+  elseif(NAME STREQUAL "libigl")
+    if(TARGET libigl)
+      return()
+    endif()
+
+    if(WIN32)
+      set(LIBIGL_LIB "")
+    else()
+      include(GNUInstallDirs)
+      set(LIBIGL_LIB "")
+    endif()
+
+    add_external_headeronly_project(libigl
+        GIT_REPOSITORY https://github.com/libigl/libigl.git
+        GIT_TAG "v2.1.0"
+        INCLUDE_DIR "include")
+
 
   # bhtsne
   elseif(NAME STREQUAL "bhtsne")
@@ -244,28 +273,28 @@ function(require_external NAME)
 
   # imgui
   elseif(NAME STREQUAL "imgui")
-    if(TARGET imgui)
-      return()
-    endif()
+    if(NOT TARGET imgui)
+      
+      if(WIN32)
+        set(IMGUI_LIB "lib/imgui.lib")
+      else()
+        set(IMGUI_LIB "lib/libimgui.a")
+      endif()
 
-    if(WIN32)
-      set(IMGUI_LIB "lib/imgui.lib")
-    else()
-      set(IMGUI_LIB "lib/libimgui.a")
-    endif()
+      add_external_project(imgui STATIC
+        GIT_REPOSITORY https://github.com/ocornut/imgui.git
+        GIT_TAG "v1.70"
+        BUILD_BYPRODUCTS "<INSTALL_DIR>/${IMGUI_LIB}"
+        PATCH_COMMAND ${CMAKE_COMMAND} -E copy
+          "${CMAKE_SOURCE_DIR}/cmake/imgui/CMakeLists.txt"
+          "<SOURCE_DIR>/CMakeLists.txt")
 
-    add_external_project(imgui STATIC
-      GIT_REPOSITORY https://github.com/ocornut/imgui.git
-      GIT_TAG "v1.70"
-      BUILD_BYPRODUCTS "<INSTALL_DIR>/${IMGUI_LIB}"
-      PATCH_COMMAND ${CMAKE_COMMAND} -E copy
-        "${CMAKE_SOURCE_DIR}/cmake/imgui/CMakeLists.txt"
-        "<SOURCE_DIR>/CMakeLists.txt")
+      add_external_library(imgui
+        LIBRARY ${IMGUI_LIB})
+
+    endif()
 
     external_get_property(imgui SOURCE_DIR)
-
-    add_external_library(imgui
-      LIBRARY ${IMGUI_LIB})
 
     target_include_directories(imgui INTERFACE "${SOURCE_DIR}/examples" "${SOURCE_DIR}/misc/cpp")
 
