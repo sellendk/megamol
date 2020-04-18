@@ -71,9 +71,15 @@ protected:
     bool getMetaDataCallback(core::Call& caller);
 
 private:
+    void blur(std::shared_ptr<glowl::Texture2D> in_tx, std::shared_ptr<glowl::Texture2D> out_tx, int num = -1);
+
     typedef vislib::graphics::gl::GLSLComputeShader GLSLComputeShader;
 
-    uint32_t m_version;
+	/** Shader program for deinterleaving depth buffer for texture ssao */
+    std::unique_ptr<GLSLComputeShader> m_ssao_deinterleave_prgm;
+
+	/** Shader program for interleaving four half x half textures */
+    std::unique_ptr<GLSLComputeShader> m_ssao_interleave_prgm;
 
     /** Shader program for texture ssao */
     std::unique_ptr<GLSLComputeShader> m_ssao_prgm;
