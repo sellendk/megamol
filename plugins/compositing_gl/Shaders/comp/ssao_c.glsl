@@ -1,3 +1,6 @@
+// [1]: taken from https://github.com/GameTechDev/ASSAO
+// and GPU ZEN - Advanced Rendering Techniques, Chapter Scalable Adaptive SSAO, p. 194, Filip Strugar
+
 // generate and output AO and edges
 // generate edge? just mark the pixel if there is an edge?
 // --> texture RG8: (occlusion, edge_bool);
@@ -39,8 +42,20 @@ vec3 depthToViewPos(float depth, vec2 uv) {
 }
 
 
-// taken from https://github.com/GameTechDev/ASSAO
-// and GPU ZEN - Advanced Rendering Techniques, Chapter Scalable Adaptive SSAO, p. 194, Filip Strugar
+// see [1] on top
+// packing/unpacking for edges; 2 bits per edge mean 4 gradient values (0, 0.33, 0.66, 1) for smoother transitions!
+float PackEdges( vec4 edgesLRTB )
+{
+    // int4 edgesLRTBi = int4( saturate( edgesLRTB ) * 3.0 + 0.5 );
+    // return ( (edgesLRTBi.x << 6) + (edgesLRTBi.y << 4) + (edgesLRTBi.z << 2) + (edgesLRTBi.w << 0) ) / 255.0;
+
+    // optimized, should be same as above
+    edgesLRTB = round( clamp( edgesLRTB, 0.0, 1.0 ) * 3.05 );
+    return dot( edgesLRTB, float4( 64.0 / 255.0, 16.0 / 255.0, 4.0 / 255.0, 1.0 / 255.0 ) ) ;
+}
+
+
+// see [1] on top
 vec4 depthBasedEdgeDetection(float center_z, float left_z, float right_z, float top_z, float bottom_z) {
     vec4 edgesLRTB = vec4(left_z, right_z, top_z, bottom_z) - vec4(center_z);
     vec4 edgesLRTBSlopeAdjusted = edgesLRTB + edgesLRTB.yxwz;
@@ -157,14 +172,10 @@ void main()
     tz = depthToViewPos(tz, pcn_tz).r;
     bz = depthToViewPos(bz, pcn_bz).r;
 
-    vec4 isEdge = depthBasedEdgeDetection(view_pos.z, lz, rz, tz, bz);
-    int numEdges = 0;
-    // TODO set threshold for edge
-    if(isEdge.x == 0) ++numEdges;
-    if(isEdge.y == 0) ++numEdges;
-    if(isEdge.z == 0) ++numEdges;
-    if(isEdge.w == 0) ++numEdges;
+    vec4 edgesLRTB = depthBasedEdgeDetection(view_pos.z, lz, rz, tz, bz);
+    
+    float packedEdges = PackEdges(edgesLRTB);
 
 
-    imageStore(ao_edge_tx2D, pixel_coords, vec4(occlusion, numEdges, 1.0, 1.0));
+    imageStore(ao_edge_tx2D, pixel_coords, vec4(occlusion, packedEdges, 1.0, 1.0));
 }

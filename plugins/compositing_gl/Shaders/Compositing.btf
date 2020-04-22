@@ -34,7 +34,7 @@
 
     <shader name="blur">
         <snippet type="version">430</snippet>
-        <snippet name="Main"             type="file">comp/simple_blur_c.glsl</snippet>
+        <snippet name="Main"             type="file">comp/smart_blur_c.glsl</snippet>
     </shader>
 
     <shader name="fxaa">
