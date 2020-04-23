@@ -1,11 +1,10 @@
 // [1]: taken from https://github.com/GameTechDev/ASSAO
 // and GPU ZEN - Advanced Rendering Techniques, Chapter Scalable Adaptive SSAO, p. 194, Filip Strugar
 
-// generate and output AO and edges
-// generate edge? just mark the pixel if there is an edge?
-// --> texture RG8: (occlusion, edge_bool);
-
-// TODO set quality presets
+#define SSAO_QUALITY_PRESET_LOW         0
+#define SSAO_PRESET_QUALITY_MEDIUM      1
+#define SSAO_PRESET_QUALITY_HIGH        2
+#define SSAO_PRESET_QUALITY_ADAPTIVE    3
 
 struct Samples
 {
@@ -16,6 +15,7 @@ layout(std430, binding = 1) readonly buffer SamplesBuffer { Samples samples[]; }
 uniform int sample_cnt;
 uniform float radius;
 uniform int current_buffer;
+uniform uint quality_preset;
 
 uniform sampler2D normal_tx2D;
 uniform sampler2D depth_tx2D;
@@ -104,7 +104,7 @@ void main()
     
     vec3 normal    = texture(normal_tx2D, normal_coords_norm).rgb;
     // TODO use mip maps during sampling
-    // is this happening here?
+    // is this automatically happening here?
     float depth    = texture(depth_tx2D, pixel_coords_norm).r;
     vec3 rand_vec  = texture(noise_tx2D, normal_coords_norm * noise_scale).xyz;
 
@@ -152,30 +152,29 @@ void main()
     
     occlusion = 1.0 - (occlusion / sample_cnt);
 
-    // get neighbors of current pixel
+    // get z-values of neighbors of current pixel
     // caution: border pixels may cause artifacts
     // TODO better border handling
     // ASSAO extends image to have the actual border not at the screen border
-    vec2 pcn_lz = (vec2(pixel_coords - vec2(1, 0)) + vec2(0.5)) / vec2(tgt_resolution);
-    vec2 pcn_rz = (vec2(pixel_coords + vec2(1, 0)) + vec2(0.5)) / vec2(tgt_resolution);
-    vec2 pcn_tz = (vec2(pixel_coords + vec2(0, 1)) + vec2(0.5)) / vec2(tgt_resolution);
-    vec2 pcn_bz = (vec2(pixel_coords - vec2(0, 1)) + vec2(0.5)) / vec2(tgt_resolution);
+    float packed_edges = 1.0;
 
-    float lz = texture(depth_tx2D, pcn_lz).r;
-    float rz = texture(depth_tx2D, pcn_rz).r;
-    float tz = texture(depth_tx2D, pcn_tz).r;
-    float bz = texture(depth_tx2D, pcn_bz).r;
+    if(quality_preset >= SSAO_PRESET_QUALITY_MEDIUM) {
+        float lz = textureOffset(depth_tx2D, pixel_coords, ivec2(-1, 0)).r;
+        float rz = textureOffset(depth_tx2D, pixel_coords, ivec2(1, 0)).r;
+        float tz = textureOffset(depth_tx2D, pixel_coords, ivec2(0, 1)).r;
+        float bz = textureOffset(depth_tx2D, pixel_coords, ivec2(0, -1)).r;
 
-    // transform neighbour dephs to viewspace
-    lz = depthToViewPos(lz, pcn_lz).r;
-    rz = depthToViewPos(rz, pcn_rz).r;
-    tz = depthToViewPos(tz, pcn_tz).r;
-    bz = depthToViewPos(bz, pcn_bz).r;
+        // transform neighbour dephs to viewspace
+        lz = depthToViewPos(lz, pcn_lz).r;
+        rz = depthToViewPos(rz, pcn_rz).r;
+        tz = depthToViewPos(tz, pcn_tz).r;
+        bz = depthToViewPos(bz, pcn_bz).r;
 
-    vec4 edgesLRTB = depthBasedEdgeDetection(view_pos.z, lz, rz, tz, bz);
-    
-    float packedEdges = PackEdges(edgesLRTB);
+        vec4 edgesLRTB = depthBasedEdgeDetection(view_pos.z, lz, rz, tz, bz);
+
+        packed_edges = PackEdges(edgesLRTB);
+    }
 
 
-    imageStore(ao_edge_tx2D, pixel_coords, vec4(occlusion, packedEdges, 1.0, 1.0));
-}
+    imageStore(ao_edge_tx2D, pixel_coords, vec4(occlusion, packed_edges, 1.0, 1.0));
+}   

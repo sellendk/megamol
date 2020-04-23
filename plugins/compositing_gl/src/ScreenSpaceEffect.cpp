@@ -20,6 +20,7 @@ megamol::compositing::ScreenSpaceEffect::ScreenSpaceEffect() : core::Module()
     , m_output_texture(nullptr)
     , m_output_texture_hash(0)
     , m_mode("Mode", "Sets screen space effect mode, e.g. ssao, fxaa...")
+    , m_quality_preset("Quality", "Sets the quality level for the ASSAO")
     , m_ssao_radius("SSAO Radius", "Sets radius for SSAO")
     , m_ssao_sample_cnt("SSAO Samples", "Sets the number of samples used SSAO")
     , m_output_tex_slot("OutputTexture", "Gives access to resulting output texture")
@@ -31,6 +32,13 @@ megamol::compositing::ScreenSpaceEffect::ScreenSpaceEffect() : core::Module()
     this->m_mode.Param<megamol::core::param::EnumParam>()->SetTypePair(0, "SSAO");
     this->m_mode.Param<megamol::core::param::EnumParam>()->SetTypePair(1, "FXAA");
     this->MakeSlotAvailable(&this->m_mode);
+
+	this->m_quality_preset << new megamol::core::param::EnumParam(0);
+    this->m_quality_preset.Param<megamol::core::param::EnumParam>()->SetTypePair(0, "LOW");
+    this->m_quality_preset.Param<megamol::core::param::EnumParam>()->SetTypePair(1, "MEDIUM");
+    this->m_quality_preset.Param<megamol::core::param::EnumParam>()->SetTypePair(2, "HIGH");
+    this->m_quality_preset.Param<megamol::core::param::EnumParam>()->SetTypePair(3, "HIGHEST (ADAPTIVE)");
+    this->MakeSlotAvailable(&this->m_quality_preset);
 
     this->m_ssao_sample_cnt << new megamol::core::param::IntParam(16, 0, 64);
     this->MakeSlotAvailable(&this->m_ssao_sample_cnt);
@@ -151,15 +159,20 @@ bool megamol::compositing::ScreenSpaceEffect::create() {
 
 void megamol::compositing::ScreenSpaceEffect::release() {}
 
-void megamol::compositing::ScreenSpaceEffect::blur(
-    std::shared_ptr<glowl::Texture2D> in_tx, std::shared_ptr<glowl::Texture2D> out_tx, int num) {
+void megamol::compositing::ScreenSpaceEffect::blur(std::shared_ptr<glowl::Texture2D> in_tx,
+    std::shared_ptr<glowl::Texture2D> out_tx, std::shared_ptr<glowl::Texture2D> normal_tx, int num) {
     m_ssao_blur_prgm->Enable();
 
     glUniform1i(m_ssao_blur_prgm->ParameterLocation("current_buffer"), num);
+    glUniform1ui(m_ssao_blur_prgm->ParameterLocation("quality_preset"), 
+		m_quality_preset.Param<core::param::EnumParam>()->Value());
 
     glActiveTexture(GL_TEXTURE0);
     in_tx->bindTexture();
     glUniform1i(m_ssao_blur_prgm->ParameterLocation("src_tx2D"), 0);
+    glActiveTexture(GL_TEXTURE1);
+    normal_tx->bindTexture();
+    glUniform1i(m_ssao_blur_prgm->ParameterLocation("normal_tx2D"), 1);
 
     out_tx->bindImage(0, GL_WRITE_ONLY);
 
@@ -314,6 +327,8 @@ bool megamol::compositing::ScreenSpaceEffect::getDataCallback(core::Call& caller
 		        glUniform1i(m_ssao_prgm->ParameterLocation("sample_cnt"),
 		            m_ssao_sample_cnt.Param<core::param::IntParam>()->Value());
 		        glUniform1i(m_ssao_prgm->ParameterLocation("current_buffer"), i);
+                glUniform1ui(m_ssao_prgm->ParameterLocation("quality_preset"), 
+					m_quality_preset.Param<core::param::EnumParam>()->Value());
 
 		        glActiveTexture(GL_TEXTURE0);
 		        normal_tx2D->bindTexture();
@@ -350,7 +365,7 @@ bool megamol::compositing::ScreenSpaceEffect::getDataCallback(core::Call& caller
 		        // ------------------------------------------------------------------------------------------------
 		        // Blur
 		        // ------------------------------------------------------------------------------------------------
-		        blur(ao_edge_textures[i], m_intermediate_texture, i);
+		        blur(ao_edge_textures[i], m_intermediate_texture, normal_tx2D, i);
 		        // ------------------------------------------------------------------------------------------------
 		        // Blur end
 		        // ------------------------------------------------------------------------------------------------
@@ -377,7 +392,7 @@ bool megamol::compositing::ScreenSpaceEffect::getDataCallback(core::Call& caller
 		    glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT);
 
 		    // final blur on resulting full resolution texture
-		    blur(m_intermediate_texture, m_output_texture);
+		    blur(m_intermediate_texture, m_output_texture, normal_tx2D);
 
 		    // ------------------------------------------------------------------------------------------------
 		    // Interleave and final blur end
