@@ -34,10 +34,11 @@ megamol::compositing::ScreenSpaceEffect::ScreenSpaceEffect() : core::Module()
     this->MakeSlotAvailable(&this->m_mode);
 
 	this->m_quality_preset << new megamol::core::param::EnumParam(0);
-    this->m_quality_preset.Param<megamol::core::param::EnumParam>()->SetTypePair(0, "LOW");
-    this->m_quality_preset.Param<megamol::core::param::EnumParam>()->SetTypePair(1, "MEDIUM");
-    this->m_quality_preset.Param<megamol::core::param::EnumParam>()->SetTypePair(2, "HIGH");
-    this->m_quality_preset.Param<megamol::core::param::EnumParam>()->SetTypePair(3, "HIGHEST (ADAPTIVE)");
+    this->m_quality_preset.Param<megamol::core::param::EnumParam>()->SetTypePair(0, "LOWEST");
+    this->m_quality_preset.Param<megamol::core::param::EnumParam>()->SetTypePair(1, "LOW");
+    this->m_quality_preset.Param<megamol::core::param::EnumParam>()->SetTypePair(2, "MEDIUM");
+    this->m_quality_preset.Param<megamol::core::param::EnumParam>()->SetTypePair(3, "HIGH");
+    this->m_quality_preset.Param<megamol::core::param::EnumParam>()->SetTypePair(4, "HIGHEST (ADAPTIVE)");
     this->MakeSlotAvailable(&this->m_quality_preset);
 
     this->m_ssao_sample_cnt << new megamol::core::param::IntParam(16, 0, 64);

@@ -1,10 +1,11 @@
 // [1]: taken from https://github.com/GameTechDev/ASSAO
 // and GPU ZEN - Advanced Rendering Techniques, Chapter Scalable Adaptive SSAO, p. 194, Filip Strugar
 
-#define SSAO_QUALITY_PRESET_LOW         0
-#define SSAO_PRESET_QUALITY_MEDIUM      1
-#define SSAO_PRESET_QUALITY_HIGH        2
-#define SSAO_PRESET_QUALITY_ADAPTIVE    3
+#define SSAO_QUALITY_PRESET_LOWEST      0
+#define SSAO_QUALITY_PRESET_LOW         1
+#define SSAO_PRESET_QUALITY_MEDIUM      2
+#define SSAO_PRESET_QUALITY_HIGH        3
+#define SSAO_PRESET_QUALITY_ADAPTIVE    4
 
 #define SSAO_NORMAL_BASED_EDGES_THRESHOLD 0.5
 
@@ -29,6 +30,7 @@ vec4 UnpackEdges( float packed_value )
     return clamp( edgesLRTB /*+ Inv_Sharpness*/, 0.0, 1.0 ); // TODO add uniform for (inv)sharpness
 }
 
+// see [1] on top
 void AddSample( float ssao_value, float edge_value, inout float sum, inout float sum_weight )
 {
     float weight = edge_value;

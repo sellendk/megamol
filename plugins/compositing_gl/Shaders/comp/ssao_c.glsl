@@ -1,10 +1,11 @@
 // [1]: taken from https://github.com/GameTechDev/ASSAO
 // and GPU ZEN - Advanced Rendering Techniques, Chapter Scalable Adaptive SSAO, p. 194, Filip Strugar
 
-#define SSAO_QUALITY_PRESET_LOW         0
-#define SSAO_PRESET_QUALITY_MEDIUM      1
-#define SSAO_PRESET_QUALITY_HIGH        2
-#define SSAO_PRESET_QUALITY_ADAPTIVE    3
+#define SSAO_QUALITY_PRESET_LOWEST      0
+#define SSAO_QUALITY_PRESET_LOW         1
+#define SSAO_PRESET_QUALITY_MEDIUM      2
+#define SSAO_PRESET_QUALITY_HIGH        3
+#define SSAO_PRESET_QUALITY_ADAPTIVE    4
 
 struct Samples
 {
@@ -65,6 +66,52 @@ vec4 depthBasedEdgeDetection(float center_z, float left_z, float right_z, float 
     return clamp(vec4(1.3) - edgesLRTB / (center_z * 0.040), 0.0, 1.0);
 }
 
+vec3 NewSample(vec3 current_pos, mat3 tangent_mx) {
+    vec3 sample = tangent_mx * vec3(samples[i].x, samples[i].y, samples[i].z); // From tangent to view-space
+    sample = current_pos + sample * radius;
+
+    return sample;
+}
+
+vec4 TransformZeroToOne(vec3 sample_pos) {
+    vec4 offset = vec4(sample_vs_pos, 1.0);
+    offset      = proj_mx * offset;       // from view to clip-space
+    offset.xyz /= offset.w;               // perspective divide --> NDC
+    offset.xyz  = offset.xyz * 0.5 + 0.5; // transform to range 0.0 - 1.0
+
+    return offset;
+}
+
+float CalculatePixelObscurance() {
+    return 0.0;
+}
+
+float SSAOTapInner (vec2 sample_uv) {
+    
+
+    return 0.0;
+}
+
+float SSAOTap(vec3 view_pos, mat3 tangent_mx) {
+    // get sample position
+    vec3 sample_vs_pos = NewSample(view_pos, tangent_mx);
+    
+    // transform sample to [0,1] range to sample depth
+    vec4 offset = TransformZeroToOne(sample_vs_pos);
+    SSAOTapInner(vec2 offset.xy);
+
+    vec4 mirrored_offset = -offset;
+    SSAOTapInner(mirrored_offset.xy);
+
+    return 0.0;
+}
+
+// might not be needed since it can just be written in main
+float GenerateSSAOShadowsInternal() {
+    // 
+    return 0.0;
+}
+
 
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
@@ -72,6 +119,30 @@ layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 // see https://learnopengl.com/Advanced-Lighting/SSAO
 void main()
 {
+    // get z-values of neighbors of current pixel
+    // caution: border pixels may cause artifacts
+    // TODO better border handling
+    // ASSAO extends image (optionally) to have the actual border not at the screen border
+    float packed_edges = 1.0;
+
+    if(quality_preset >= SSAO_PRESET_QUALITY_MEDIUM) {
+        float lz = textureOffset(depth_tx2D, pixel_coords, ivec2(-1, 0)).r;
+        float rz = textureOffset(depth_tx2D, pixel_coords, ivec2(1, 0)).r;
+        float tz = textureOffset(depth_tx2D, pixel_coords, ivec2(0, 1)).r;
+        float bz = textureOffset(depth_tx2D, pixel_coords, ivec2(0, -1)).r;
+
+        // transform neighbour dephs to viewspace
+        lz = depthToViewPos(lz, pcn_lz).r;
+        rz = depthToViewPos(rz, pcn_rz).r;
+        tz = depthToViewPos(tz, pcn_tz).r;
+        bz = depthToViewPos(bz, pcn_bz).r;
+
+        vec4 edgesLRTB = depthBasedEdgeDetection(view_pos.z, lz, rz, tz, bz);
+
+        packed_edges = PackEdges(edgesLRTB);
+    }
+
+
     uvec3 gID = gl_GlobalInvocationID.xyz;
     ivec2 pixel_coords = ivec2(gID.xy);
     ivec2 normal_coords = pixel_coords;
@@ -110,10 +181,10 @@ void main()
 
     vec3 view_pos = depthToViewPos(depth, pixel_coords_norm);
 
-    normal = transpose(mat3(inv_view_mx)) * normal; // transform normal to view space
+    vec3 normal_vs = transpose(mat3(inv_view_mx)) * normal; // transform normal to view space
     vec3 tangent    = normalize(rand_vec - normal * dot(rand_vec, normal));
-    vec3 bitangent  = cross(normal, tangent);
-    mat3 tangent_mx = mat3(tangent, bitangent, normal);
+    vec3 bitangent  = cross(normal_vs, tangent);
+    mat3 tangent_mx = mat3(tangent, bitangent, normal_vs);
     
     float bias = 0.0001;
 
@@ -124,56 +195,36 @@ void main()
 
     if(depth > 0.0)
     {
-        for(int i = 0; i < sample_cnt; ++i)
-        {
-            // get sample position
-            sample_vs_pos = tangent_mx * vec3(samples[i].x, samples[i].y, samples[i].z); // From tangent to view-space
-            sample_vs_pos = view_pos + sample_vs_pos * radius;
+        // basically the taps
+        // maybe only use for lowest quality setting
+        if(quality_preset <= SSAO_QUALITY_PRESET_LOWEST) {
+            for(int i = 0; i < sample_cnt; ++i)
+            {
+                // get sample position
+                sample_vs_pos = NewSample(view_pos, tangent_mx);
+                
+                // transform sample to [0,1] range to sample depth
+                vec4 offset = TransformZeroToOne(sample_vs_pos);
 
-            vec4 offset = vec4(sample_vs_pos, 1.0);
-            offset      = proj_mx * offset;       // from view to clip-space
-            offset.xyz /= offset.w;               // perspective divide
-            offset.xyz  = offset.xyz * 0.5 + 0.5; // transform to range 0.0 - 1.0
+                if(offset.x > 1.0 || offset.x < 0.0 || offset.y > 1.0 || offset.y < 0.0)
+                    continue;
 
-            if(offset.x > 1.0 || offset.x < 0.0 || offset.y > 1.0 || offset.y < 0.0f)
-                continue;
+                float sample_depth = texture(depth_tx2D, offset.xy).r;
 
-            float sample_depth = texture(depth_tx2D, offset.xy).r;
+                if(sample_depth < 0.0001)
+                    continue;
 
-            if(sample_depth < 0.0001)
-                continue;
+                frag_vs_pos = depthToViewPos(sample_depth, offset.xy);
 
-            frag_vs_pos = depthToViewPos(sample_depth, offset.xy);
+                float range_check = smoothstep(0.0, 1.0, radius / abs(length(view_pos) - length(frag_vs_pos)));
+                occlusion += (length(frag_vs_pos) <= length(sample_vs_pos) - bias ? 1.0 : 0.0) * range_check;
+            }
+        } else {
 
-            float range_check = smoothstep(0.0, 1.0, radius / abs(length(view_pos) - length(frag_vs_pos)));
-            occlusion += (length(frag_vs_pos) <= length(sample_vs_pos) - bias ? 1.0 : 0.0) * range_check;
         }
     }
     
     occlusion = 1.0 - (occlusion / sample_cnt);
-
-    // get z-values of neighbors of current pixel
-    // caution: border pixels may cause artifacts
-    // TODO better border handling
-    // ASSAO extends image to have the actual border not at the screen border
-    float packed_edges = 1.0;
-
-    if(quality_preset >= SSAO_PRESET_QUALITY_MEDIUM) {
-        float lz = textureOffset(depth_tx2D, pixel_coords, ivec2(-1, 0)).r;
-        float rz = textureOffset(depth_tx2D, pixel_coords, ivec2(1, 0)).r;
-        float tz = textureOffset(depth_tx2D, pixel_coords, ivec2(0, 1)).r;
-        float bz = textureOffset(depth_tx2D, pixel_coords, ivec2(0, -1)).r;
-
-        // transform neighbour dephs to viewspace
-        lz = depthToViewPos(lz, pcn_lz).r;
-        rz = depthToViewPos(rz, pcn_rz).r;
-        tz = depthToViewPos(tz, pcn_tz).r;
-        bz = depthToViewPos(bz, pcn_bz).r;
-
-        vec4 edgesLRTB = depthBasedEdgeDetection(view_pos.z, lz, rz, tz, bz);
-
-        packed_edges = PackEdges(edgesLRTB);
-    }
 
 
     imageStore(ao_edge_tx2D, pixel_coords, vec4(occlusion, packed_edges, 1.0, 1.0));
