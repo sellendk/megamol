@@ -71,18 +71,9 @@ protected:
     bool getMetaDataCallback(core::Call& caller);
 
 private:
-    void blur(std::shared_ptr<glowl::Texture2D> in_tx, std::shared_ptr<glowl::Texture2D> out_tx,
-        std::shared_ptr<glowl::Texture2D> normal_tx, int num = -1);
-
     typedef vislib::graphics::gl::GLSLComputeShader GLSLComputeShader;
 
-	uint32_t m_version;
-
-	/** Shader program for deinterleaving depth buffer for texture ssao */
-    std::unique_ptr<GLSLComputeShader> m_ssao_deinterleave_prgm;
-
-	/** Shader program for interleaving four half x half textures */
-    std::unique_ptr<GLSLComputeShader> m_ssao_interleave_prgm;
+    uint32_t m_version;
 
     /** Shader program for texture ssao */
     std::unique_ptr<GLSLComputeShader> m_ssao_prgm;
@@ -110,9 +101,6 @@ private:
 
     /** Parameter for selecting the screen space effect that is computed, e.g. ssao, fxaa,... */
     megamol::core::param::ParamSlot m_mode;
-
-	/** Parameter for setting the quality level of ASSAO */
-    megamol::core::param::ParamSlot m_quality_preset;
 
     /** Parameter for selecting the ssao radius */
     megamol::core::param::ParamSlot m_ssao_radius;
