@@ -14,6 +14,8 @@
 #include "mmstd/light/PointLight.h"
 #include "mmstd/light/TriDirectionalLighting.h"
 
+#include "Matcap/DefaultMatcapTex.h" // default matcap texture
+
 using megamol::core::utility::log::Log;
 
 megamol::compositing_gl::LocalLighting::LocalLighting()
@@ -41,6 +43,7 @@ megamol::compositing_gl::LocalLighting::LocalLighting()
         , m_albedo_tex_slot("AlbedoTexture", "Connect to the albedo render target texture")
         , m_normal_tex_slot("NormalTexture", "Connects to the normals render target texture")
         , m_depth_tex_slot("DepthTexture", "Connects to the depth render target texture")
+        , m_matcap_tex_slot("MatCapTexture", "Connects to the matcap texture")
         , m_roughness_metalness_tex_slot(
               "RoughMetalTexture", "Connects to the roughness/metalness render target texture")
         , m_lightSlot("lights", "Lights are retrieved over this slot")
@@ -51,6 +54,7 @@ megamol::compositing_gl::LocalLighting::LocalLighting()
     this->m_illuminationmode.Param<megamol::core::param::EnumParam>()->SetTypePair(0, "Lambert");
     this->m_illuminationmode.Param<megamol::core::param::EnumParam>()->SetTypePair(1, "Blinn-Phong");
     this->m_illuminationmode.Param<megamol::core::param::EnumParam>()->SetTypePair(2, "Toon");
+    this->m_illuminationmode.Param<megamol::core::param::EnumParam>()->SetTypePair(3, "Matcap");
     this->MakeSlotAvailable(&this->m_illuminationmode);
 
     this->m_phong_ambientColor << new megamol::core::param::ColorParam(1.0, 1.0, 1.0, 1.0);
@@ -91,6 +95,9 @@ megamol::compositing_gl::LocalLighting::LocalLighting()
     this->m_depth_tex_slot.SetCompatibleCall<CallTexture2DDescription>();
     this->MakeSlotAvailable(&this->m_depth_tex_slot);
 
+    this->m_matcap_tex_slot.SetCompatibleCall<CallTexture2DDescription>();
+    this->MakeSlotAvailable(&this->m_matcap_tex_slot);
+
     this->m_roughness_metalness_tex_slot.SetCompatibleCall<CallTexture2DDescription>();
     this->MakeSlotAvailable(&this->m_roughness_metalness_tex_slot);
 
@@ -125,6 +132,7 @@ bool megamol::compositing_gl::LocalLighting::getDataCallback(core::Call& caller)
     auto call_albedo = m_albedo_tex_slot.CallAs<CallTexture2D>();
     auto call_normal = m_normal_tex_slot.CallAs<CallTexture2D>();
     auto call_depth = m_depth_tex_slot.CallAs<CallTexture2D>();
+    auto call_matcap = m_matcap_tex_slot.CallAs<CallTexture2D>();
     auto call_camera = m_camera_slot.CallAs<CallCamera>();
     auto call_light = m_lightSlot.CallAs<core::view::light::CallLight>();
 
@@ -146,6 +154,11 @@ bool megamol::compositing_gl::LocalLighting::getDataCallback(core::Call& caller)
             return false;
         }
     }
+    if (call_matcap != nullptr) {
+        if (!(*call_matcap)(0)) {
+            return false;
+        }
+    }
     if (call_camera != nullptr) {
         if (!(*call_camera)(0)) {
             return false;
@@ -163,7 +176,9 @@ bool megamol::compositing_gl::LocalLighting::getDataCallback(core::Call& caller)
     if (all_calls_valid) {
         // something has changed in the neath...
         bool something_has_changed =
-            call_albedo->hasUpdate() || call_normal->hasUpdate() || call_depth->hasUpdate() || call_camera->hasUpdate();
+            call_albedo->hasUpdate() || call_normal->hasUpdate() ||
+            call_depth->hasUpdate() || call_camera->hasUpdate() ||
+            (call_matcap != nullptr && call_matcap->hasUpdate());
 
         if (something_has_changed) {
             ++m_version;
@@ -272,6 +287,8 @@ bool megamol::compositing_gl::LocalLighting::getDataCallback(core::Call& caller)
 
                     auto inv_view_mx = glm::inverse(view_mx);
                     auto inv_proj_mx = glm::inverse(proj_mx);
+                    glUniformMatrix4fv(
+                        m_lambert_prgm->getUniformLocation("view_mx"), 1, GL_FALSE, glm::value_ptr(view_mx));
                     glUniformMatrix4fv(
                         m_lambert_prgm->getUniformLocation("inv_view_mx"), 1, GL_FALSE, glm::value_ptr(inv_view_mx));
                     glUniformMatrix4fv(
@@ -407,6 +424,49 @@ bool megamol::compositing_gl::LocalLighting::getDataCallback(core::Call& caller)
 
                     glUseProgram(0);
                 }
+            } else if (this->m_illuminationmode.Param<core::param::EnumParam>()->Value() == 3) {
+                if (m_matcap_prgm != nullptr) {
+                    std::shared_ptr<glowl::Texture2D> matcap_tx2D;
+                    if (call_matcap != nullptr) {
+                        matcap_tx2D = call_matcap->getData();
+                    } else {
+                        if (m_matcap_texture == nullptr) {
+                            glowl::TextureLayout ly;
+                            ly.width = DEFAULT_MATCAP_TEX_WIDTH;
+                            ly.height = DEFAULT_MATCAP_TEX_HEIGHT;
+                            ly.depth = 1;
+                            ly.levels = 1;
+                            ly.type = GL_FLOAT;
+                            ly.format = GL_RGBA;
+                            ly.internal_format = GL_RGBA32F;
+
+                            m_matcap_texture =
+                                std::make_shared<glowl::Texture2D>("matcap_tx2D", ly, default_matcap_data);
+                        }
+
+                        matcap_tx2D = m_matcap_texture;
+                    }
+
+                    m_matcap_prgm->use();
+
+                    glActiveTexture(GL_TEXTURE0);
+                    normal_tx2D->bindTexture();
+                    glUniform1i(m_matcap_prgm->getUniformLocation("normal_tx2D"), 0);
+
+                    glActiveTexture(GL_TEXTURE1);
+                    matcap_tx2D->bindTexture();
+                    glUniform1i(m_matcap_prgm->getUniformLocation("matcap_tx2D"), 1);
+
+                    glUniformMatrix4fv(
+                        m_matcap_prgm->getUniformLocation("view_mx"), 1, GL_FALSE, glm::value_ptr(view_mx));
+
+                    m_output_texture->bindImage(0, GL_WRITE_ONLY);
+
+                    glDispatchCompute(static_cast<int>(std::ceil(std::get<0>(texture_res) / 8.0f)),
+                        static_cast<int>(std::ceil(std::get<1>(texture_res) / 8.0f)), 1);
+
+                    glUseProgram(0);
+                }
             }
         }
     }
@@ -434,6 +494,9 @@ bool megamol::compositing_gl::LocalLighting::textureFormatUpdate() {
 
         m_toon_prgm = core::utility::make_glowl_shader(
             "compositing_toon", *shader_options_flags, "compositing_gl/toon.comp.glsl");
+
+        m_matcap_prgm = core::utility::make_glowl_shader(
+            "compositing_matcap", *shader_options_flags, "compositing_gl/matcap.comp.glsl");
 
     } catch (std::exception& e) {
         Log::DefaultLog.WriteError(("LocalLighting: " + std::string(e.what())).c_str());

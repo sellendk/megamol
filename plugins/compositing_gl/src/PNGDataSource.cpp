@@ -12,6 +12,8 @@
 #include "mmcore/param/FilePathParam.h"
 #include "mmcore/param/IntParam.h"
 
+#include <fstream>
+
 using namespace megamol;
 using namespace megamol::compositing_gl;
 
@@ -82,7 +84,7 @@ bool PNGDataSource::getDataCallback(core::Call& caller) {
 
             if (buffer_size != NULL && png_image_finish_read(&image, NULL /*background*/, image_buffer.data(),
                                            0 /*row_stride*/, NULL /*colormap*/) != 0) {
-                std::vector<unsigned char> tx2D_buffer(buffer_size);
+                std::vector<float> tx2D_buffer(buffer_size);
 
                 // need to flip image around horizontal axis
                 for (size_t y = 0; y < image.height; ++y) {
@@ -91,16 +93,35 @@ bool PNGDataSource::getDataCallback(core::Call& caller) {
 
                         size_t flip_id = x + (image.height - 1 - y) * image.width;
 
-                        tx2D_buffer[4 * id + 0] = image_buffer[4 * flip_id + 0]; // R
-                        tx2D_buffer[4 * id + 1] = image_buffer[4 * flip_id + 1]; // G
-                        tx2D_buffer[4 * id + 2] = image_buffer[4 * flip_id + 2]; // B
-                        tx2D_buffer[4 * id + 3] = image_buffer[4 * flip_id + 3]; // A
+                        tx2D_buffer[4 * id + 0] = image_buffer[4 * flip_id + 0] / 255.f; // R
+                        tx2D_buffer[4 * id + 1] = image_buffer[4 * flip_id + 1] / 255.f; // G
+                        tx2D_buffer[4 * id + 2] = image_buffer[4 * flip_id + 2] / 255.f; // B
+                        tx2D_buffer[4 * id + 3] = image_buffer[4 * flip_id + 3] / 255.f; // A
                     }
                 }
 
                 m_output_layout.width = image.width;
                 m_output_layout.height = image.height;
+                m_output_layout.format = GL_RGBA;
                 m_output_texture->reload(m_output_layout, tx2D_buffer.data());
+
+#define GET_MATCAP1
+#ifdef GET_MATCAP
+                std::ofstream of("default_matcap.txt");
+                for (size_t y = 0; y < image.height; ++y) {
+                    for (size_t x = 0; x < image.width; ++x) {
+                        size_t id = x + y * image.width;
+                        of << tx2D_buffer[4 * id + 0] << ", ";
+                        of << tx2D_buffer[4 * id + 1] << ", ";
+                        of << tx2D_buffer[4 * id + 2] << ", ";
+                        of << tx2D_buffer[4 * id + 3] << ", ";
+                        if (id && id % 2 == 0) {
+                            of << '\n';
+                        }
+                    }
+                }
+                of.close();
+#endif // GET_MATCAP
 
                 ++m_version;
                 m_filename_slot.ResetDirty();

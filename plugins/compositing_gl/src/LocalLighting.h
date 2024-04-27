@@ -90,8 +90,14 @@ private:
     /** Shader program for texture add (Blinn-Phong Illumination) */
     std::unique_ptr<glowl::GLSLProgram> m_toon_prgm;
 
+    /** Shader program for matcaps */
+    std::unique_ptr<glowl::GLSLProgram> m_matcap_prgm;
+
     /** Texture that the lighting result will be written to */
     std::shared_ptr<glowl::Texture2D> m_output_texture;
+
+    /** Default Matcap Texture */
+    std::shared_ptr<glowl::Texture2D> m_matcap_texture;
 
     //TODO add same thing for Ambient Light as for point & distant light
 
@@ -132,6 +138,9 @@ private:
 
     /** Slot for querying normal buffer texture, i.e. a rhs connection */
     megamol::core::CallerSlot m_depth_tex_slot;
+
+    /** Slot for querying matcap texture, i.e. a rhs connection */
+    megamol::core::CallerSlot m_matcap_tex_slot;
 
     /** Slot for querying texture that contain roughness and metalness channel, i.e. a rhs connection */
     megamol::core::CallerSlot m_roughness_metalness_tex_slot;
